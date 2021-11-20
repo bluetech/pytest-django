@@ -187,17 +187,23 @@ def _django_db_fixture_helper(
 
 
 def _disable_migrations() -> None:
-    from django.conf import settings
+    if get_django_version() >= (3, 1):
+        from django.db import connections
+        for alias in connections:
+            connections[alias].settings_dict["TEST"]["MIGRATE"] = False
+    else:
+        from django.conf import settings
+
+        class DisableMigrations:
+            def __contains__(self, item: str) -> bool:
+                return True
+
+            def __getitem__(self, item: str) -> None:
+                return None
+
+        settings.MIGRATION_MODULES = DisableMigrations()
+
     from django.core.management.commands import migrate
-
-    class DisableMigrations:
-        def __contains__(self, item: str) -> bool:
-            return True
-
-        def __getitem__(self, item: str) -> None:
-            return None
-
-    settings.MIGRATION_MODULES = DisableMigrations()
 
     class MigrateSilentCommand(migrate.Command):
         def handle(self, *args, **kwargs):

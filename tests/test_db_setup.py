@@ -466,13 +466,21 @@ class TestMigrations:
 
         django_testdir.create_test_module(
             """
-            raise Exception("This should not get imported.")
+            from django.db import migrations
+
+            def fail(*args):
+                raise Exception("This should not get run.")
+
+            class Migration(migrations.Migration):
+                operations = [
+                    migrations.RunPython(fail),
+                ]
             """,
             "migrations/0001_initial.py",
         )
 
         result = django_testdir.runpytest_subprocess(
-            "--nomigrations", "--tb=short", "-vv", "-s",
+            "--reuse-db", "--nomigrations", "--tb=short", "-vv", "-s",
         )
         assert result.ret == 0
         assert "Operations to perform:" not in result.stdout.str()
