@@ -38,6 +38,7 @@ from .fixtures import django_db_setup  # noqa
 from .fixtures import django_db_use_migrations  # noqa
 from .fixtures import django_user_model  # noqa
 from .fixtures import django_username_field  # noqa
+from .fixtures import django_test_data  # noqa
 from .fixtures import live_server  # noqa
 from .fixtures import rf  # noqa
 from .fixtures import settings  # noqa
@@ -742,3 +743,39 @@ def validate_urls(marker) -> List[str]:
         return urls
 
     return apifun(*marker.args, **marker.kwargs)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_fixture_setup(fixturedef, request):
+    # Implement the magic of `django_test_data`.
+    # When a user fixture *directly* requests `django_test_data`,
+    # its body is wrapped in an atomic block, which is rolled back
+    # at the end of the fixture's scope (*not* the fixture setup
+    # itself!).
+
+    if 'django_test_data' not in fixturedef.argnames:
+        yield
+        return
+
+    from django.db import transaction
+
+    atomics = {}
+    # TODO
+    databases = ('default',)
+    django_db_blocker = request.getfixturevalue('django_db_blocker')
+
+    with django_db_blocker.unblock():
+        for db_name in databases:
+            atomic = transaction.atomic(using=db_name)
+            atomic._from_testcase = True
+            atomic.__enter__()
+            atomics[db_name] = atomic
+
+        yield
+
+    def finalize_django_test_data():
+        with django_db_blocker.unblock():
+            for db_name in reversed(databases):
+                transaction.set_rollback(True, using=db_name)
+                atomics[db_name].__exit__(None, None, None)
+    request.addfinalizer(finalize_django_test_data)

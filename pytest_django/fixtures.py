@@ -369,6 +369,13 @@ def django_db_serialized_rollback(
     # is requested.
 
 
+@pytest.fixture(scope="session")
+def django_test_data(django_db_setup: None) -> None:
+    """A fixture that may be requested by other fixtures to allow
+    them to modify the database, with all database modifications
+    rolled back at the end of the scope."""
+
+
 @pytest.fixture()
 def client() -> "django.test.client.Client":
     """A Django test client instance."""
